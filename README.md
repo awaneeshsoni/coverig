@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Coverig
 
-## Getting Started
+SaaS for remixing short-form video templates. Create templates, upload assets, and let users remix them with custom text, videos, and styling.
 
-First, run the development server:
+## Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Next.js 14** (App Router)
+- **Supabase** (Auth, PostgreSQL, RLS)
+- **Cloudflare R2** (Media storage)
+- **Redis + BullMQ** (Render queue)
+- **FFmpeg** (Video rendering)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone and install:
+   ```bash
+   npm install
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Copy env template and fill in your values:
+   ```bash
+   cp .env.example .env.local
+   ```
 
-## Learn More
+3. Run Supabase migrations:
+   ```bash
+   # Apply migrations via Supabase dashboard SQL editor or CLI
+   # Files: supabase/migration_*.sql
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+4. Start Redis (for queue):
+   ```bash
+   npm run redis   # or: docker run -p 6379:6379 redis:7-alpine
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+5. Run dev server and worker:
+   ```bash
+   npm run dev     # Next.js
+   npm run worker  # BullMQ worker (FFmpeg renders)
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy
 
-## Deploy on Vercel
+- **Vercel** (recommended): Push to GitHub, connect repo, add env vars. Use Vercel's Redis or **Upstash** for the queue.
+- **Worker**: Deploy the worker as a separate process (e.g. Railway, Render, Fly.io) or use Vercel's background functions.
+- See [DEPLOY.md](./DEPLOY.md) for free-tier deployment options.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Next.js dev server |
+| `npm run build` | Production build |
+| `npm run worker` | Start BullMQ worker |
+| `npm run redis` | Start Redis via Docker |

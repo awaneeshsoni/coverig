@@ -34,3 +34,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# worker temp files
+.worker-tmp
+
+# Cursor / IDE
+.cursor
+agent-transcripts
+*.plan.md

@@ -6,21 +6,40 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "redis": "docker compose up -d redis",
+    "redis:stop": "docker compose down",
+    "worker": "npx tsx --env-file=.env.local workers/previewWorker.ts",
+    "worker:render": "npx tsx --env-file=.env.local workers/renderWorker.ts",
+    "worker:schedule": "npx tsx --env-file=.env.local workers/scheduleWorker.ts",
+    "worker:analytics": "npx tsx --env-file=.env.local workers/analyticsWorker.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1004.0",
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.98.0",
+    "bullmq": "^5.70.4",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "ioredis": "^5.10.0",
+    "lucide-react": "^0.577.0",
+    "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.35"
+    "tailwind-merge": "^3.5.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "typescript": "^5",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35"
+    "tsx": "^4.21.0",
+    "typescript": "^5"
   }
 }
