@@ -1,0 +1,19 @@
+FROM node:20-slim
+
+# Install FFmpeg (required for video rendering)
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Full install (tsx is in devDependencies, worker needs it)
+RUN npm install
+
+# Copy worker + shared libs (worker imports ../src/lib/queue/redis)
+COPY workers/ workers/
+COPY src/ src/
+COPY tsconfig.json ./
+
+CMD ["npx", "tsx", "workers/previewWorker.ts"]
