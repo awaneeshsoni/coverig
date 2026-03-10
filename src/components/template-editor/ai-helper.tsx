@@ -55,7 +55,7 @@ export function AiHelper({ open, onClose, onApply, fields, templateName }: AiHel
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="AI Content Suggest">
+    <Modal open={open} onClose={onClose} title="AI SUGGEST">
       <div className="space-y-4">
         <Input
           id="topic"
@@ -66,11 +66,11 @@ export function AiHelper({ open, onClose, onApply, fields, templateName }: AiHel
         />
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-700">Target Element</label>
+          <label className="block text-sm font-medium text-zinc-300">Target Element</label>
           <select
             value={selectedKey}
             onChange={(e) => setSelectedKey(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            className="w-full rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
           >
             {fields.map((f) => (
               <option key={f.key} value={f.key}>{f.label}</option>
@@ -84,7 +84,7 @@ export function AiHelper({ open, onClose, onApply, fields, templateName }: AiHel
         </Button>
 
         {generatedText && (
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <div className="rounded border border-zinc-200 bg-zinc-50 p-4">
             <p className="text-sm text-zinc-800 mb-3">{generatedText}</p>
             <Button
               size="sm"

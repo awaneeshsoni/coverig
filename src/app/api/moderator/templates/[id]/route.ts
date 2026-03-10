@@ -42,6 +42,9 @@ export async function PATCH(
     }
 
     const updates = await request.json();
+    if (updates.preview_video_url !== undefined && !updates.preview_video_url?.trim()) {
+      return NextResponse.json({ error: 'Sample video (preview) is required' }, { status: 400 });
+    }
     const supabase = createServerSupabaseClient();
 
     const { data, error } = await supabase

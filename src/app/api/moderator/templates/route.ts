@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getUserRole, canManageTemplates } from '@/lib/auth/roles';
-import { getPreviewQueue } from '@/lib/queue';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,18 +38,21 @@ export async function POST(request: Request) {
     if (!name || !config_json) {
       return NextResponse.json({ error: 'name and config_json are required' }, { status: 400 });
     }
+    if (!preview_video_url?.trim()) {
+      return NextResponse.json({ error: 'Sample video (preview) is required' }, { status: 400 });
+    }
 
     const supabase = createServerSupabaseClient();
-    const status = publish ? 'processing' : 'draft';
+    const status = publish ? 'published' : 'draft';
 
     const insert: Record<string, unknown> = {
       name,
       description: description || '',
       config_json,
+      preview_video_url: preview_video_url.trim(),
       status,
       creator_id: userInfo.userId,
     };
-    if (preview_video_url) insert.preview_video_url = preview_video_url;
 
     const { data, error } = await supabase
       .from('templates')
@@ -61,8 +63,7 @@ export async function POST(request: Request) {
     if (error) throw error;
 
     if (publish && data) {
-      await getPreviewQueue().add('preview', { template_id: data.id }, { jobId: `preview-${data.id}-${Date.now()}` });
-      console.log(`[API] Queued preview job for new template ${data.id}`);
+      console.log(`[API] Template ${data.id} published`);
     }
 
     return NextResponse.json({ data }, { status: 201 });

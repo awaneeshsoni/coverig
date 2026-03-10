@@ -13,10 +13,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', loading, children, disabled, ...props }, ref) => {
     const variants = {
-      primary: 'bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20',
-      secondary: 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300',
-      ghost: 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-800',
-      danger: 'bg-red-500 hover:bg-red-600 text-white',
+      primary: 'bg-orange-500 hover:bg-orange-600 text-white font-medium',
+      secondary: 'bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-300 font-medium text-sm',
+      ghost: 'hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900 font-medium text-sm',
+      danger: 'bg-red-600 hover:bg-red-500 text-white font-medium',
     };
     const sizes = {
       sm: 'px-3 py-1.5 text-sm',
@@ -27,7 +27,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+          'inline-flex items-center justify-center gap-2 rounded-sm transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-orange-500 focus-visible:ring-offset-1 focus-visible:ring-offset-white',
           variants[variant],
           sizes[size],
           className

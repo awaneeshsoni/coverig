@@ -11,7 +11,7 @@ export default async function ModeratorLayout({ children }: { children: React.Re
   return (
     <div className="flex h-screen overflow-hidden">
       <ModeratorSidebar role={userInfo.role} />
-      <main className="flex-1 overflow-y-auto scrollbar-thin">
+      <main className="flex-1 overflow-y-auto scrollbar-thin bg-white bg-grid-subtle">
         <div className="mx-auto max-w-7xl px-6 py-8">
           {children}
         </div>

@@ -5,6 +5,12 @@
 :root {
   --background: #ffffff;
   --foreground: #18181b;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --card: #ffffff;
+  --accent: #f97316;
+  --accent-hover: #ea580c;
+  --grid: rgba(0, 0, 0, 0.06);
 }
 
 body {
@@ -22,5 +28,25 @@ body {
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: #d4d4d8 transparent;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Subtle grid background */
+  .bg-grid-subtle {
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .font-mono-nums {
+    font-variant-numeric: tabular-nums;
   }
 }

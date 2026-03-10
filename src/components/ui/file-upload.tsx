@@ -34,11 +34,11 @@ export function FileUpload({ accept, label, onChange, value, type = 'image' }: F
 
   return (
     <div className="space-y-1.5">
-      {label && <p className="text-sm font-medium text-zinc-700">{label}</p>}
+      {label && <p className="text-sm font-medium text-zinc-300">{label}</p>}
       {value ? (
-        <div className="flex items-center gap-3 rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3">
+        <div className="flex items-center gap-3 rounded border border-zinc-300 bg-white px-4 py-3">
           <Icon className="h-5 w-5 text-orange-500 shrink-0" />
-          <span className="text-sm text-zinc-700 truncate flex-1">{value.name}</span>
+          <span className="text-sm text-zinc-800 truncate flex-1">{value.name}</span>
           <button onClick={() => onChange(null)} className="text-zinc-500 hover:text-red-400 transition-colors">
             <X className="h-4 w-4" />
           </button>
@@ -49,11 +49,11 @@ export function FileUpload({ accept, label, onChange, value, type = 'image' }: F
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           className={cn(
-            'relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 transition-colors cursor-pointer',
-            dragOver ? 'border-orange-500 bg-orange-50' : 'border-zinc-300 hover:border-zinc-400 bg-zinc-50'
+            'relative flex flex-col items-center justify-center gap-2 rounded border-2 border-dashed px-4 py-8 transition-colors cursor-pointer',
+            dragOver ? 'border-orange-500 bg-orange-50' : 'border-zinc-300 hover:border-orange-500/50 bg-zinc-50'
           )}
         >
-          <Upload className="h-8 w-8 text-zinc-500" />
+          <Upload className="h-8 w-8 text-orange-500/70" />
           <p className="text-sm text-zinc-400">
             Drop file here or <span className="text-orange-500">browse</span>
           </p>

@@ -97,24 +97,24 @@ export function MediaLibraryModal({ open, onClose, onSelect, accept = 'all' }: M
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-sm border border-zinc-200 border-l-2 border-l-orange-500/40 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-900">
           <div className="flex items-center gap-3">
             <FolderOpen className="h-5 w-5 text-orange-500" />
-            <h2 className="text-lg font-semibold text-zinc-900">Content Library</h2>
-            <span className="text-xs text-zinc-400">{total} assets</span>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-orange-500">Content Library</h2>
+            <span className="text-xs text-zinc-500">{total} assets</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setLibraryMuted((m) => !m)}
-              className="p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-500"
+              className="p-1.5 rounded hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900"
               title={libraryMuted ? 'Unmute previews' : 'Mute previews'}
             >
               {libraryMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
             <select value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value as MediaCategory)}
-              className="text-xs border border-zinc-200 rounded px-2 py-1 bg-white">
+              className="text-xs border border-zinc-300 rounded px-2 py-1 bg-white text-zinc-900">
               {MEDIA_CATEGORIES.filter((c) => c.value !== 'all').map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
@@ -124,34 +124,34 @@ export function MediaLibraryModal({ open, onClose, onSelect, accept = 'all' }: M
             </Button>
             <input ref={fileInputRef} type="file" accept={acceptAttr} className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-colors">
+            <button onClick={onClose} className="p-1.5 rounded hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900 transition-colors">
               <X className="h-5 w-5" />
             </button>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="px-6 py-3 border-b border-zinc-50 space-y-3">
+        <div className="px-6 py-3 border-b border-zinc-200 space-y-3">
           <div className="flex items-center gap-4">
             {/* Category pills */}
             <div className="flex gap-1 flex-wrap flex-1">
               {MEDIA_CATEGORIES.map((c) => (
                 <button key={c.value} onClick={() => setCategory(c.value)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
                     category === c.value
-                      ? 'bg-orange-100 text-orange-700'
-                      : 'text-zinc-500 hover:bg-zinc-100'
+                      ? 'bg-orange-500/30 text-orange-400 border border-orange-500/50'
+                      : 'text-zinc-500 hover:bg-zinc-100 border border-transparent'
                   }`}
                 >{c.label}</button>
               ))}
             </div>
             {/* Type toggle */}
             {accept === 'all' && (
-              <div className="flex gap-0.5 bg-zinc-100 rounded-lg p-0.5">
+              <div className="flex gap-0.5 bg-zinc-100 rounded p-0.5">
                 {TYPE_OPTIONS.map((t) => (
                   <button key={t.value} onClick={() => setFileType(t.value)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                      fileType === t.value ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      fileType === t.value ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
                     }`}
                   >{t.label}</button>
                 ))}
@@ -163,7 +163,7 @@ export function MediaLibraryModal({ open, onClose, onSelect, accept = 'all' }: M
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
             <input type="text" value={search} onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search by filename or tag..."
-              className="w-full pl-9 pr-4 py-2 border border-zinc-200 rounded-lg text-sm bg-white placeholder:text-zinc-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500" />
+              className="w-full pl-9 pr-4 py-2 border border-zinc-300 rounded text-sm bg-white text-zinc-900 placeholder:text-zinc-400 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500" />
           </div>
         </div>
 
@@ -174,7 +174,7 @@ export function MediaLibraryModal({ open, onClose, onSelect, accept = 'all' }: M
               <Loader2 className="h-8 w-8 text-orange-500 animate-spin" />
             </div>
           ) : assets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 text-zinc-400">
+            <div className="flex flex-col items-center justify-center h-48 text-zinc-500">
               <FolderOpen className="h-12 w-12 mb-3" />
               <p className="text-sm font-medium">No assets found</p>
               <p className="text-xs mt-1">Upload some content or adjust your filters</p>
@@ -184,7 +184,7 @@ export function MediaLibraryModal({ open, onClose, onSelect, accept = 'all' }: M
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                 {assets.map((asset) => (
                   <button key={asset.id} onClick={() => onSelect(asset.url)}
-                    className="group relative aspect-[9/16] rounded-lg overflow-hidden border border-zinc-200 hover:border-orange-400 hover:ring-2 hover:ring-orange-200 transition-all bg-zinc-100 text-left"
+                    className="group relative aspect-[9/16] rounded overflow-hidden border border-zinc-200 hover:border-orange-500 hover:ring-2 hover:ring-orange-200 transition-all bg-zinc-100 text-left"
                     onMouseEnter={(e) => { const v = e.currentTarget.querySelector('video'); if (v) v.play().catch(() => {}); }}
                     onMouseLeave={(e) => { const v = e.currentTarget.querySelector('video'); if (v) { v.pause(); v.currentTime = 0; } }}
                   >

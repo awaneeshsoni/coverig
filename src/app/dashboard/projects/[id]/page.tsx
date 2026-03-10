@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
-import { ProjectDetail } from '@/components/project-detail';
-import type { Project } from '@/types';
+import { TemplateEditor } from '@/components/template-editor/editor';
+import type { Project, Template } from '@/types';
 
 interface Props {
   params: { id: string };
@@ -20,7 +20,7 @@ export default async function ProjectPage({ params }: Props) {
     .eq('user_id', user.id)
     .single();
 
-  if (!project) notFound();
+  if (!project?.template) notFound();
 
-  return <ProjectDetail project={project as Project} />;
+  return <TemplateEditor template={project.template as Template} project={project as Project} />;
 }

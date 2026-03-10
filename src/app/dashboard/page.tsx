@@ -1,10 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { getStatusColor, formatDate } from '@/lib/utils';
-import { Film, FolderOpen, Clock, CheckCircle } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
+import { Film, FolderOpen, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
 import type { Project } from '@/types';
 
@@ -26,27 +25,26 @@ export default async function DashboardPage() {
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id);
 
-  const { count: completedProjects } = await supabase
-    .from('projects')
+  const { count: totalContent } = await supabase
+    .from('content')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+
+  const { count: completedContent } = await supabase
+    .from('content')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', user.id)
     .eq('status', 'completed');
-
-  const { count: renderingProjects } = await supabase
-    .from('projects')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-    .in('status', ['queued', 'rendering']);
 
   const { count: totalTemplates } = await supabase
     .from('templates')
     .select('*', { count: 'exact', head: true });
 
   const stats = [
-    { label: 'Total Projects', value: totalProjects || 0, icon: FolderOpen, color: 'text-orange-500' },
-    { label: 'Completed', value: completedProjects || 0, icon: CheckCircle, color: 'text-emerald-400' },
-    { label: 'Rendering', value: renderingProjects || 0, icon: Clock, color: 'text-yellow-400' },
-    { label: 'Templates', value: totalTemplates || 0, icon: Film, color: 'text-blue-400' },
+    { label: 'Projects', value: totalProjects || 0, icon: FolderOpen, color: 'text-orange-500' },
+    { label: 'Content', value: totalContent || 0, icon: Film, color: 'text-blue-400' },
+    { label: 'Renders', value: completedContent || 0, icon: CheckCircle, color: 'text-emerald-400' },
+    { label: 'Templates', value: totalTemplates || 0, icon: Film, color: 'text-zinc-500' },
   ];
 
   return (
@@ -60,11 +58,11 @@ export default async function DashboardPage() {
         {stats.map((stat) => (
           <Card key={stat.label}>
             <CardContent className="flex items-center gap-4 py-5">
-              <div className={`rounded-lg bg-zinc-100 p-2.5 ${stat.color}`}>
+              <div className={`rounded-sm border border-zinc-200 p-2.5 ${stat.color}`}>
                 <stat.icon className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-zinc-900">{stat.value}</p>
+                <p className="text-2xl font-bold font-mono text-zinc-900">{stat.value}</p>
                 <p className="text-xs text-zinc-500">{stat.label}</p>
               </div>
             </CardContent>
@@ -94,25 +92,25 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid gap-3">
             {(projects as Project[]).map((project) => (
-              <Card key={project.id}>
+              <Card key={project.id} className="hover:border-orange-500/50 transition-colors">
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-zinc-100 flex items-center justify-center">
-                      <Film className="h-5 w-5 text-zinc-500" />
+                    <div className="h-10 w-10 rounded-sm border border-zinc-200 bg-zinc-50 flex items-center justify-center">
+                      <Film className="h-5 w-5 text-orange-500" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-zinc-800">
+                      <Link
+                        href={`/dashboard/projects/${project.id}`}
+                        className="text-sm font-medium text-zinc-800 hover:text-orange-600 hover:underline"
+                      >
                         {project.template?.name || 'Untitled'}
-                      </p>
-                      <p className="text-xs text-zinc-500">{formatDate(project.created_at)}</p>
+                      </Link>
+                      <p className="text-xs text-zinc-600">{formatDate(project.created_at)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-                    <Link href={`/dashboard/projects/${project.id}`}>
-                      <Button variant="ghost" size="sm">View</Button>
-                    </Link>
-                  </div>
+                  <Link href={`/dashboard/projects/${project.id}`}>
+                    <Button variant="ghost" size="sm">Edit</Button>
+                  </Link>
                 </CardContent>
               </Card>
             ))}

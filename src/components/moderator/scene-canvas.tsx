@@ -19,14 +19,13 @@ interface SceneCanvasProps {
 }
 
 const ELEMENT_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  text:       { bg: 'rgba(249,115,22,0.15)', border: 'rgb(249,115,22)',  text: '#fff' },
-  video_slot: { bg: 'rgba(59,130,246,0.15)', border: 'rgb(59,130,246)',  text: '#93c5fd' },
-  video:      { bg: 'rgba(168,85,247,0.15)', border: 'rgb(168,85,247)',  text: '#c4b5fd' },
-  image:      { bg: 'rgba(34,197,94,0.15)',  border: 'rgb(34,197,94)',   text: '#86efac' },
+  text:  { bg: 'rgba(249,115,22,0.15)', border: 'rgb(249,115,22)',  text: '#fff' },
+  video: { bg: 'rgba(59,130,246,0.15)', border: 'rgb(59,130,246)',  text: '#93c5fd' },
+  image: { bg: 'rgba(34,197,94,0.15)',  border: 'rgb(34,197,94)',   text: '#86efac' },
 };
 
 const SIZE_DEFAULTS: Record<string, { w: number; h: number }> = {
-  text: { w: 80, h: 8 }, video_slot: { w: 50, h: 30 }, video: { w: 40, h: 25 }, image: { w: 25, h: 15 },
+  text: { w: 80, h: 8 }, video: { w: 50, h: 30 }, image: { w: 25, h: 15 },
 };
 
 function getIcon(type: string) {
@@ -115,7 +114,7 @@ export function SceneCanvas({
         backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
         backgroundSize: '10% 10%',
       }} />
-      {(backgroundVideo || elements.some((el, i) => (el.type === 'video' || el.type === 'video_slot') && (liveMedia?.[i] ?? el.src))) && (
+      {(backgroundVideo || elements.some((el, i) => el.type === 'video' && (liveMedia?.[i] ?? el.src))) && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
@@ -169,7 +168,7 @@ export function SceneCanvas({
             )}
 
             {/* Video thumbnail */}
-            {(el.type === 'video' || el.type === 'video_slot') && mediaUrl && (
+            {el.type === 'video' && mediaUrl && (
               <video
                 src={mediaUrl} muted={muted} playsInline loop autoPlay draggable={false}
                 className="absolute inset-0 w-full h-full pointer-events-none"

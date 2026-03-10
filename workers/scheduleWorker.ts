@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { ensureValidToken } from '../src/lib/instagram';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -6,7 +7,7 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-const GRAPH_API = 'https://graph.facebook.com/v21.0';
+const GRAPH_API = 'https://graph.instagram.com/v21.0';
 
 async function publishToInstagram(
   igUserId: string,
@@ -66,7 +67,7 @@ async function processDuePosts() {
 
   const { data: duePosts, error } = await supabase
     .from('scheduled_posts')
-    .select('*, project:projects(*)')
+    .select('*, project:projects(*), content:content(output_video_url)')
     .eq('status', 'pending')
     .eq('platform', 'instagram')
     .lte('scheduled_time', now)
@@ -78,8 +79,11 @@ async function processDuePosts() {
 
   for (const post of duePosts) {
     try {
-      const project = post.project;
-      if (!project?.output_video_url) {
+      const videoUrl = post.content_id && post.content?.output_video_url
+        ? post.content.output_video_url
+        : post.project?.output_video_url;
+
+      if (!videoUrl) {
         console.log(`[Scheduler] Post ${post.id}: no video, marking failed`);
         await supabase.from('scheduled_posts').update({ status: 'failed' }).eq('id', post.id);
         continue;
@@ -97,12 +101,22 @@ async function processDuePosts() {
         continue;
       }
 
+      const accessToken = await ensureValidToken(
+        igAccount,
+        async (newToken, newExpiry) => {
+          await supabase
+            .from('instagram_accounts')
+            .update({ access_token: newToken, token_expiry: newExpiry })
+            .eq('user_id', post.user_id);
+        }
+      );
+
       console.log(`[Scheduler] Publishing post ${post.id} to Instagram...`);
 
       const mediaId = await publishToInstagram(
         igAccount.instagram_user_id,
-        igAccount.access_token,
-        project.output_video_url,
+        accessToken,
+        videoUrl,
         post.caption || ''
       );
 

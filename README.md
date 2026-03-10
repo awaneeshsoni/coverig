@@ -33,10 +33,11 @@ SaaS for remixing short-form video templates. Create templates, upload assets, a
    npm run redis   # or: docker run -p 6379:6379 redis:7-alpine
    ```
 
-5. Run dev server and worker:
+5. Run dev server and workers:
    ```bash
-   npm run dev     # Next.js
-   npm run worker  # BullMQ worker (FFmpeg renders)
+   npm run dev           # Next.js
+   npm run worker:render # Video render worker
+   npm run worker:schedule # Post scheduling worker
    ```
 
 ## Deploy
@@ -51,5 +52,6 @@ SaaS for remixing short-form video templates. Create templates, upload assets, a
 |--------|-------------|
 | `npm run dev` | Next.js dev server |
 | `npm run build` | Production build |
-| `npm run worker` | Start BullMQ worker |
+| `npm run worker:render` | Video render worker |
+| `npm run worker:schedule` | Post scheduling worker |
 | `npm run redis` | Start Redis via Docker |

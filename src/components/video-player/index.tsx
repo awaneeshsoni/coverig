@@ -37,7 +37,7 @@ export function VideoPlayer({ src, poster, className, aspectRatio = 'video' }: V
   const aspect = aspectRatio === 'portrait' ? 'aspect-[9/16]' : 'aspect-video';
 
   return (
-    <div className={cn('group relative rounded-xl overflow-hidden bg-zinc-100', aspect, className)}>
+    <div className={cn('group relative rounded overflow-hidden bg-zinc-900 border border-zinc-800', aspect, className)}>
       <video
         ref={videoRef}
         src={src}

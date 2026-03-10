@@ -33,14 +33,14 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     >
       <div
         className={cn(
-          'relative w-full max-w-lg rounded-xl border border-zinc-200 bg-white shadow-2xl',
+          'relative w-full max-w-lg rounded-sm border border-zinc-200 bg-white shadow-2xl border-l-2 border-l-orange-500/40',
           className
         )}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3.5">
             <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
-            <button onClick={onClose} className="text-zinc-400 hover:text-zinc-900 transition-colors">
+            <button onClick={onClose} className="text-zinc-500 hover:text-zinc-900 transition-colors">
               <X className="h-5 w-5" />
             </button>
           </div>

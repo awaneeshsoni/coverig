@@ -7,22 +7,32 @@ import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import Redis from 'ioredis';
 
-const QUEUE_NAME = 'video-render';
-
-interface RenderJob {
-  project_id: string;
-  template_id: string;
-  inputs_json: Record<string, string>;
-}
+const RENDER_QUEUE = 'video-render';
+const POLL_INTERVAL_MS = 10_000;
 
 interface SceneElement {
-  type: 'text' | 'video_slot';
+  type: 'text' | 'video' | 'image';
   label: string;
   editable: boolean;
   position?: 'top' | 'center' | 'bottom';
   fontSize?: number;
   fontColor?: string;
+  fontFamily?: string;
+  fontWeight?: 'normal' | 'bold';
+  dropShadow?: boolean;
+  shadowColor?: string;
+  shadowX?: number;
+  shadowY?: number;
+  opacity?: number;
+  borderRadius?: number;
+  objectFit?: 'cover' | 'contain';
   default_value?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  scale?: number;
+  src?: string;
 }
 
 interface TemplateScene {
@@ -47,26 +57,25 @@ function getRedisConfig() {
   };
 }
 
-async function verifyRedisConnection(): Promise<void> {
+async function verifyRedisConnection(): Promise<boolean> {
   const config = getRedisConfig();
   const client = new Redis({ host: config.host, port: config.port, password: config.password, lazyConnect: true });
-
   try {
     await client.connect();
     const pong = await client.ping();
-    console.log(`[Worker] Redis connected at ${config.host}:${config.port} — PING=${pong}`);
-  } catch (err) {
-    console.error(`[Worker] FATAL: Cannot connect to Redis at ${config.host}:${config.port}`);
-    console.error(`[Worker] Is Redis running? Try: docker compose up -d redis`);
-    throw err;
+    console.log(`[Worker] Redis OK at ${config.host}:${config.port} — PING=${pong}`);
+    return true;
+  } catch {
+    console.warn(`[Worker] Redis unavailable — falling back to DB polling only`);
+    return false;
   } finally {
-    await client.quit();
+    await client.quit().catch(() => {});
   }
 }
 
 function requireEnv(name: string): string {
   const val = process.env[name];
-  if (!val) throw new Error(`[Worker] FATAL: Missing environment variable ${name}`);
+  if (!val) throw new Error(`FATAL: Missing env var ${name}`);
   return val;
 }
 
@@ -88,53 +97,58 @@ const s3 = new S3Client({
   credentials: { accessKeyId: r2AccessKey, secretAccessKey: r2SecretKey },
 });
 
-const WORK_DIR = join(process.cwd(), '.render-tmp');
+const WORK_DIR = join(process.cwd(), '.worker-tmp');
 const W = 1080;
 const H = 1920;
 
-async function updateProjectStatus(projectId: string, status: string, outputUrl?: string) {
-  const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
-  if (outputUrl) updates.output_video_url = outputUrl;
-  const { error } = await supabase.from('projects').update(updates).eq('id', projectId);
-  if (error) console.error(`[Worker] Failed to update project ${projectId} to ${status}:`, error.message);
-  else console.log(`[Worker] Project ${projectId} status → ${status}`);
-}
+if (!existsSync(WORK_DIR)) mkdirSync(WORK_DIR, { recursive: true });
 
-async function uploadToR2(filePath: string): Promise<string> {
-  const key = `renders/${uuidv4()}.mp4`;
-  const body = readFileSync(filePath);
-  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: 'video/mp4' }));
-  return `${PUBLIC_URL}/${key}`;
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/');
 }
 
 function extractR2Key(url: string): string | null {
   const s3WithBucket = `https://${r2AccountId}.r2.cloudflarestorage.com/${BUCKET}/`;
   if (url.startsWith(s3WithBucket)) return url.slice(s3WithBucket.length);
-
   const s3NoBucket = `https://${r2AccountId}.r2.cloudflarestorage.com/`;
   if (url.startsWith(s3NoBucket)) return url.slice(s3NoBucket.length);
-
   const publicPrefix = `${PUBLIC_URL}/`;
   if (url.startsWith(publicPrefix)) return url.slice(publicPrefix.length);
-
   return null;
 }
 
 async function downloadFromR2(key: string, dest: string): Promise<void> {
+  const dir = join(dest, '..');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   const resp = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
-  if (!resp.Body) throw new Error(`Empty response for R2 key: ${key}`);
+  if (!resp.Body) throw new Error(`Empty R2 response: ${key}`);
   const bytes = await resp.Body.transformToByteArray();
   writeFileSync(dest, Buffer.from(bytes));
+  console.log(`[Worker]   Downloaded ${(bytes.length / 1024 / 1024).toFixed(1)}MB → ${dest.split(/[/\\]/).pop()}`);
+}
+
+async function downloadFile(url: string, dest: string): Promise<void> {
+  console.log(`[Worker]   Downloading: ${url.substring(0, 80)}...`);
+  const r2Key = extractR2Key(url);
+  if (r2Key) {
+    await downloadFromR2(r2Key, dest);
+    return;
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed (${res.status}): ${url}`);
+  writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+}
+
+async function uploadToR2(filePath: string, folder: string): Promise<string> {
+  const key = `${folder}/${uuidv4()}.mp4`;
+  const body = readFileSync(filePath);
+  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: 'video/mp4' }));
+  return `${PUBLIC_URL}/${key}`;
 }
 
 function esc(text: string): string {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/:/g, '\\:')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/;/g, '\\;');
+  return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/:/g, '\\:')
+    .replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/;/g, '\\;');
 }
 
 function yPos(position?: string): string {
@@ -143,212 +157,332 @@ function yPos(position?: string): string {
   return '(h-text_h)/2';
 }
 
-async function downloadFile(url: string, dest: string): Promise<void> {
-  console.log(`[Worker]   Downloading: ${url.substring(0, 80)}...`);
-
-  const r2Key = extractR2Key(url);
-  if (r2Key) {
-    console.log(`[Worker]   Using S3 SDK for R2 key: ${r2Key}`);
-    await downloadFromR2(r2Key, dest);
-    return;
+function buildSingleDrawtext(lineText: string, el: Partial<SceneElement>, yExpr: string, xExpr?: string): string {
+  const fs = el.fontSize || 56;
+  const fc = el.fontColor || 'white';
+  const x = xExpr || '(w-text_w)/2';
+  const font = el.fontFamily || 'Arial';
+  let dt = `drawtext=text='${lineText}':fontsize=${fs}:fontcolor=${fc}:font='${font}':x=${x}:y=${yExpr}`;
+  if (el.dropShadow !== false) {
+    const sx = el.shadowX ?? 2;
+    const sy = el.shadowY ?? 2;
+    const sc = el.shadowColor ? el.shadowColor.replace('#', '0x') : 'black';
+    dt += `:shadowcolor=${sc}:shadowx=${sx}:shadowy=${sy}`;
   }
-
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to download ${url}: ${response.status}`);
-  writeFileSync(dest, Buffer.from(await response.arrayBuffer()));
+  if (el.opacity != null && el.opacity < 1) {
+    dt += `:alpha=${el.opacity}`;
+  }
+  return dt;
 }
 
-function elKey(sceneIdx: number, elIdx: number): string {
-  return `scene_${sceneIdx}_el_${elIdx}`;
+function buildDrawtextLines(
+  rawText: string, el: Partial<SceneElement>, baseYExpr: string,
+  xExpr: string | undefined, lastStream: string, overlayFilters: string[], labelPrefix: string
+): string {
+  const lines = rawText.split(/\\n|\n/).filter((l) => l.length > 0);
+  if (lines.length <= 1) {
+    const lbl = `${labelPrefix}`;
+    overlayFilters.push(`[${lastStream}]${buildSingleDrawtext(esc(rawText), el, baseYExpr, xExpr)}[${lbl}]`);
+    return lbl;
+  }
+  const fs = el.fontSize || 56;
+  const lineHeight = Math.round(fs * 1.3);
+  let cur = lastStream;
+  for (let li = 0; li < lines.length; li++) {
+    const lbl = `${labelPrefix}_${li}`;
+    const yOff = `${baseYExpr}+${li * lineHeight}`;
+    overlayFilters.push(`[${cur}]${buildSingleDrawtext(esc(lines[li]), el, yOff, xExpr)}[${lbl}]`);
+    cur = lbl;
+  }
+  return cur;
 }
 
 function ffmpeg(cmd: string, timeout = 120_000): void {
   try {
     execSync(`ffmpeg ${cmd}`, { timeout, stdio: 'pipe' });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`FFmpeg failed: ${msg.substring(0, 300)}`);
+    const stderr = (err as { stderr?: Buffer })?.stderr?.toString().slice(-500) || '';
+    const msg = err instanceof Error ? err.message.substring(0, 200) : String(err);
+    throw new Error(`FFmpeg failed: ${msg}\nstderr: ${stderr}`);
   }
 }
 
-async function renderScene(
-  scene: TemplateScene,
-  sceneIdx: number,
-  inputs: Record<string, string>,
-  jobDir: string,
-  outputPath: string
-): Promise<void> {
+function elKey(sceneIdx: number, elIdx: number): string {
+  return `scene_${sceneIdx}_el_${elIdx}`;
+}
+
+/** Match SceneCanvas defaults so editor preview = rendered output */
+const SIZE_DEFAULTS: Record<string, { w: number; h: number }> = {
+  text: { w: 80, h: 8 }, video: { w: 50, h: 30 }, image: { w: 25, h: 15 },
+};
+
+function getOverlayBounds(el: SceneElement, ei: number): { x: number; y: number; w: number; h: number } {
+  const d = SIZE_DEFAULTS[el.type] || SIZE_DEFAULTS.text;
+  const w = el.width ?? d.w;
+  const h = el.height ?? d.h;
+  const x = el.x ?? (100 - w) / 2;
+  const y = el.y ?? (10 + ei * 18);
+  return { x, y, w, h };
+}
+
+function getEffectiveElement(el: SceneElement, si: number, ei: number, inputs: Record<string, unknown>): SceneElement {
+  const raw = inputs[`${elKey(si, ei)}_style`];
+  if (raw == null) return el;
+  let parsed: Record<string, unknown>;
+  if (typeof raw === 'string') {
+    try { parsed = JSON.parse(raw) as Record<string, unknown>; } catch { return el; }
+  } else if (typeof raw === 'object' && raw !== null) {
+    parsed = raw as Record<string, unknown>;
+  } else return el;
+  return { ...el, ...parsed } as SceneElement;
+}
+
+const activeJobs = new Set<string>();
+
+function cleanupDir(dir: string) {
+  try { if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }); } catch { /* */ }
+}
+
+async function updateProjectOutput(projectId: string, outputUrl: string) {
+  const { error } = await supabase.from('projects').update({ output_video_url: outputUrl, updated_at: new Date().toISOString() }).eq('id', projectId);
+  if (error) console.error(`[Render] Project update failed for ${projectId}:`, error.message);
+}
+
+async function updateContentStatus(contentId: string, status: string, outputUrl?: string) {
+  const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+  if (outputUrl) updates.output_video_url = outputUrl;
+  const { error } = await supabase.from('content').update(updates).eq('id', contentId);
+  if (error) console.error(`[Render] Content update failed for ${contentId}:`, error.message);
+  else console.log(`[Render] Content ${contentId} → ${status}`);
+}
+
+async function renderScene(scene: TemplateScene, si: number, inputs: Record<string, string>, jobDir: string, out: string) {
   const dur = scene.duration || 5;
+  console.log(`[Render]   Scene ${si}: "${scene.scene_name}" (${dur}s)`);
 
-  console.log(`[Worker]   Scene ${sceneIdx}: "${scene.scene_name}" (${dur}s)`);
-
-  const videoSlot = scene.elements.find((el, ei) => {
-    if (el.type !== 'video_slot' || !el.editable) return false;
-    return !!inputs[elKey(sceneIdx, ei)];
-  });
-
+  const videoSlot = scene.elements.find((el, ei) => el.type === 'video' && el.editable && !!inputs[elKey(si, ei)]);
   const videoSlotIdx = videoSlot ? scene.elements.indexOf(videoSlot) : -1;
-  const videoSlotUrl = videoSlotIdx >= 0 ? inputs[elKey(sceneIdx, videoSlotIdx)] : undefined;
+  const videoSlotUrl = videoSlotIdx >= 0 ? inputs[elKey(si, videoSlotIdx)] : undefined;
 
   let basePath: string;
 
+  const bgEl = scene.elements.find((e) => e.type === 'video' && !e.editable && e.src && (e.width ?? 50) >= 90 && (e.height ?? 30) >= 90);
+  const bgVideoUrl = scene.background_video || bgEl?.src;
+  const bgElIdx = bgEl ? scene.elements.indexOf(bgEl) : -1;
+
   if (videoSlotUrl) {
-    basePath = join(jobDir, `scene_${sceneIdx}_user.mp4`);
+    basePath = join(jobDir, `s${si}_user.mp4`);
     await downloadFile(videoSlotUrl, basePath);
-    const scaled = join(jobDir, `scene_${sceneIdx}_user_scaled.mp4`);
-    ffmpeg(`-y -i "${basePath}" -t ${dur} -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset fast -crf 23 -an "${scaled}"`);
+    const scaled = join(jobDir, `s${si}_user_s.mp4`);
+    ffmpeg(`-y -i "${normalizePath(basePath)}" -t ${dur} -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${normalizePath(scaled)}"`);
     basePath = scaled;
-  } else if (scene.background_video) {
-    basePath = join(jobDir, `scene_${sceneIdx}_bg.mp4`);
-    await downloadFile(scene.background_video, basePath);
-    const scaled = join(jobDir, `scene_${sceneIdx}_bg_scaled.mp4`);
-    ffmpeg(`-y -i "${basePath}" -t ${dur} -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset fast -crf 23 -an "${scaled}"`);
+  } else if (bgVideoUrl) {
+    basePath = join(jobDir, `s${si}_bg.mp4`);
+    await downloadFile(bgVideoUrl, basePath);
+    const scaled = join(jobDir, `s${si}_bg_s.mp4`);
+    ffmpeg(`-y -i "${normalizePath(basePath)}" -t ${dur} -vf "scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${normalizePath(scaled)}"`);
     basePath = scaled;
   } else {
-    basePath = join(jobDir, `scene_${sceneIdx}_color.mp4`);
-    ffmpeg(`-y -f lavfi -i "color=c=0x111111:s=${W}x${H}:d=${dur}" -c:v libx264 -preset fast -crf 23 "${basePath}"`, 30_000);
+    basePath = join(jobDir, `s${si}_color.mp4`);
+    ffmpeg(`-y -f lavfi -i "color=c=0x111111:s=${W}x${H}:d=${dur}" -f lavfi -i "anullsrc=r=44100:cl=stereo" -t ${dur} -c:v libx264 -preset fast -crf 23 -c:a aac -shortest "${normalizePath(basePath)}"`, 30_000);
+  }
+
+  const overlayInputs: string[] = [];
+  const overlayFilters: string[] = [];
+  let inputIdx = 1;
+  let lastStream = '0:v';
+
+  for (let ei = 0; ei < scene.elements.length; ei++) {
+    if (ei === bgElIdx) continue;
+    const el = getEffectiveElement(scene.elements[ei], si, ei, inputs as Record<string, unknown>);
+    if (el.type !== 'video' && el.type !== 'image') continue;
+
+    const assetUrl = el.editable ? (inputs[elKey(si, ei)] || el.src) : el.src;
+    if (!assetUrl) continue;
+
+    const ext = el.type === 'image' ? 'png' : 'mp4';
+    const assetPath = join(jobDir, `s${si}_asset_${ei}.${ext}`);
+    await downloadFile(assetUrl, assetPath);
+
+    const bounds = getOverlayBounds(el, ei);
+    const ow = Math.round(W * bounds.w / 100);
+    const oh = Math.round(H * bounds.h / 100);
+    const ox = Math.round(W * bounds.x / 100);
+    const oy = Math.round(H * bounds.y / 100);
+
+    // Loop video overlays so short clips fill the scene (prevents "first frame stuck")
+    if (el.type === 'video') {
+      overlayInputs.push(`-stream_loop -1 -i "${normalizePath(assetPath)}"`);
+    } else {
+      overlayInputs.push(`-i "${normalizePath(assetPath)}"`);
+    }
+    const scaleLabel = `as${inputIdx}`;
+    const outLabel = `ao${inputIdx}`;
+
+    const objectFit = el.objectFit || 'cover';
+    if (el.type === 'image') {
+      if (objectFit === 'contain') {
+        overlayFilters.push(`[${inputIdx}:v]scale=${ow}:${oh}:force_original_aspect_ratio=decrease,pad=${ow}:${oh}:(ow-iw)/2:(oh-ih)/2,setsar=1[${scaleLabel}]`);
+      } else {
+        overlayFilters.push(`[${inputIdx}:v]scale=${ow}:${oh}:force_original_aspect_ratio=increase,crop=${ow}:${oh},setsar=1[${scaleLabel}]`);
+      }
+    } else {
+      if (objectFit === 'contain') {
+        overlayFilters.push(`[${inputIdx}:v]scale=${ow}:${oh}:force_original_aspect_ratio=decrease,pad=${ow}:${oh}:(ow-iw)/2:(oh-ih)/2,setsar=1[${scaleLabel}]`);
+      } else {
+        overlayFilters.push(`[${inputIdx}:v]scale=${ow}:${oh}:force_original_aspect_ratio=increase,crop=${ow}:${oh},setsar=1[${scaleLabel}]`);
+      }
+    }
+    overlayFilters.push(`[${lastStream}][${scaleLabel}]overlay=${ox}:${oy}:shortest=1:eof_action=pass[${outLabel}]`);
+    lastStream = outLabel;
+    inputIdx++;
   }
 
   const textOverlays = scene.elements
-    .map((el, ei) => ({ el, ei }))
-    .filter(({ el, ei }) => {
-      if (el.type !== 'text') return false;
-      const key = elKey(sceneIdx, ei);
-      const value = el.editable ? inputs[key] : el.default_value;
-      return !!value;
-    });
+    .map((el, ei) => ({ el: getEffectiveElement(el, si, ei, inputs as Record<string, unknown>), ei }))
+    .filter(({ el, ei }) => el.type === 'text' && !!(el.editable ? inputs[elKey(si, ei)] : el.default_value));
 
-  if (textOverlays.length === 0) {
-    if (basePath !== outputPath) {
-      ffmpeg(`-y -i "${basePath}" -c copy "${outputPath}"`);
-    }
+  textOverlays.forEach(({ el, ei }, i) => {
+    const rawText = el.editable ? (inputs[elKey(si, ei)] || '') : (el.default_value || '');
+    const ty = el.y != null ? `(h*${el.y / 100})` : yPos(el.position);
+    const tx = el.x != null ? `(w*${el.x / 100})` : undefined;
+    const lbl = `rt${i}`;
+    lastStream = buildDrawtextLines(rawText, el, ty, tx, lastStream, overlayFilters, lbl);
+  });
+
+  if (overlayFilters.length === 0) {
+    if (basePath !== out) ffmpeg(`-y -i "${normalizePath(basePath)}" -c copy "${normalizePath(out)}"`);
     return;
   }
 
-  const filterParts: string[] = [];
-  let lastLabel = '0:v';
-
-  textOverlays.forEach(({ el, ei }, i) => {
-    const key = elKey(sceneIdx, ei);
-    const text = el.editable ? (inputs[key] || '') : (el.default_value || '');
-    const escaped = esc(text);
-    const y = yPos(el.position);
-    const fontSize = el.fontSize || 56;
-    const fontColor = el.fontColor || 'white';
-    const outLabel = `t${i}`;
-    filterParts.push(
-      `[${lastLabel}]drawtext=text='${escaped}':fontsize=${fontSize}:fontcolor=${fontColor}:x=(w-text_w)/2:y=${y}:shadowcolor=black:shadowx=2:shadowy=2[${outLabel}]`
-    );
-    lastLabel = outLabel;
-  });
-
-  ffmpeg(`-y -i "${basePath}" -filter_complex "${filterParts.join(';')}" -map "[${lastLabel}]" -c:v libx264 -preset fast -crf 23 "${outputPath}"`, 300_000);
+  const inputArgs = overlayInputs.join(' ');
+  ffmpeg(`-y -i "${normalizePath(basePath)}" ${inputArgs} -filter_complex "${overlayFilters.join(';')}" -map "[${lastStream}]" -map 0:a? -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${normalizePath(out)}"`, 300_000);
 }
 
-async function processRenderJob(job: Job<RenderJob>) {
-  const { project_id, template_id, inputs_json } = job.data;
-  const jobDir = join(WORK_DIR, project_id);
+async function processRender(
+  projectId: string,
+  templateId: string,
+  inputsJson: Record<string, string>,
+  source: string,
+  contentId?: string
+) {
+  if (activeJobs.has(`render:${projectId}`)) return;
+  activeJobs.add(`render:${projectId}`);
+  const jobDir = join(WORK_DIR, `render-${projectId}`);
 
-  console.log(`\n[Worker] ========================================`);
-  console.log(`[Worker] Job started: ${job.id}`);
-  console.log(`[Worker] Project: ${project_id}`);
-  console.log(`[Worker] Template: ${template_id}`);
-  console.log(`[Worker] ========================================`);
+  console.log(`\n[Render] ═══ Project: ${projectId} (${source}) ═══`);
 
   try {
-    await updateProjectStatus(project_id, 'rendering');
-
     if (!existsSync(jobDir)) mkdirSync(jobDir, { recursive: true });
 
-    const { data: template } = await supabase
-      .from('templates')
-      .select('*')
-      .eq('id', template_id)
-      .single();
-
-    if (!template) throw new Error(`Template ${template_id} not found`);
+    const { data: template } = await supabase.from('templates').select('*').eq('id', templateId).single();
+    if (!template) throw new Error(`Template ${templateId} not found`);
 
     const config: TemplateConfig = template.config_json;
-    const finalOutput = join(jobDir, 'output.mp4');
+    console.log(`[Render] Template "${template.name}" — ${config.scenes?.length || 0} scenes`);
+
+    if (!config?.scenes?.length) throw new Error('Template has no scenes');
+
+    const finalOut = join(jobDir, 'output.mp4');
     const scenePaths: string[] = [];
 
-    console.log(`[Worker] Template "${template.name}" — ${config.scenes.length} scenes`);
-
     for (let si = 0; si < config.scenes.length; si++) {
-      const scenePath = join(jobDir, `rendered_scene_${si}.mp4`);
-      await renderScene(config.scenes[si], si, inputs_json, jobDir, scenePath);
-      if (existsSync(scenePath)) scenePaths.push(scenePath);
+      const sp = join(jobDir, `rs_${si}.mp4`);
+      await renderScene(config.scenes[si], si, inputsJson, jobDir, sp);
+      if (existsSync(sp)) scenePaths.push(sp);
     }
 
-    if (scenePaths.length === 0) throw new Error('No scenes produced output');
+    if (scenePaths.length === 0) throw new Error('No scenes produced');
 
     if (scenePaths.length === 1) {
-      ffmpeg(`-y -i "${scenePaths[0]}" -c copy "${finalOutput}"`);
+      ffmpeg(`-y -i "${normalizePath(scenePaths[0])}" -c copy "${normalizePath(finalOut)}"`);
     } else {
-      const concatFile = join(jobDir, 'concat.txt');
-      writeFileSync(concatFile, scenePaths.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'));
-      ffmpeg(`-y -f concat -safe 0 -i "${concatFile}" -c:v libx264 -preset fast -crf 23 "${finalOutput}"`, 300_000);
+      const cf = join(jobDir, 'concat.txt');
+      writeFileSync(cf, scenePaths.map((p) => `file '${normalizePath(p)}'`).join('\n'));
+      ffmpeg(`-y -f concat -safe 0 -i "${normalizePath(cf)}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${normalizePath(finalOut)}"`, 300_000);
     }
 
-    if (!existsSync(finalOutput)) throw new Error('FFmpeg did not produce an output file');
+    if (!existsSync(finalOut)) throw new Error('FFmpeg produced no output');
 
-    console.log(`[Worker] Uploading to R2...`);
-    const url = await uploadToR2(finalOutput);
-
-    await updateProjectStatus(project_id, 'completed', url);
-    console.log(`[Worker] ✓ Job completed: ${job.id} → ${url}`);
-  } catch (error) {
-    console.error(`[Worker] ✗ Render failed for ${project_id}:`, error);
-    await updateProjectStatus(project_id, 'failed');
-    throw error;
+    console.log(`[Render] Uploading to R2...`);
+    const url = await uploadToR2(finalOut, 'renders');
+    await updateProjectOutput(projectId, url);
+    if (contentId) await updateContentStatus(contentId, 'completed', url);
+    console.log(`[Render] DONE → ${url}`);
+  } catch (err) {
+    console.error(`[Render] FAILED:`, err);
+    if (contentId) await updateContentStatus(contentId, 'failed');
   } finally {
-    try {
-      if (existsSync(jobDir)) rmSync(jobDir, { recursive: true, force: true });
-    } catch {
-      // cleanup failure is non-critical
+    activeJobs.delete(`render:${projectId}`);
+    cleanupDir(jobDir);
+  }
+}
+
+async function poll() {
+  try {
+    // 1. Process content queue first (Save and Publish flow)
+    const { data: contentRows } = await supabase
+      .from('content')
+      .select('id, project_id')
+      .eq('status', 'queued')
+      .order('created_at', { ascending: true })
+      .limit(3);
+
+    if (contentRows?.length) {
+      for (const c of contentRows) {
+        const { data: project } = await supabase
+          .from('projects')
+          .select('id, template_id, inputs_json')
+          .eq('id', c.project_id)
+          .single();
+        if (project) {
+          await updateContentStatus(c.id, 'rendering');
+          await processRender(project.id, project.template_id, project.inputs_json || {}, 'content-poll', c.id);
+          break; // Process one at a time
+        }
+      }
     }
+
+    // Projects no longer have status - all renders go through content
+  } catch (err) {
+    console.error('[Poll] Error:', (err as Error).message);
   }
 }
 
 async function main() {
   console.log(`[Worker] Starting render worker...`);
-  console.log(`[Worker] Queue: ${QUEUE_NAME}`);
+  console.log(`[Worker] Queue: ${RENDER_QUEUE}`);
+  console.log(`[Worker] DB poll interval: ${POLL_INTERVAL_MS / 1000}s`);
 
-  await verifyRedisConnection();
+  const redisOk = await verifyRedisConnection();
+  const workers: Worker[] = [];
 
-  const redisConfig = getRedisConfig();
-  const worker = new Worker<RenderJob>(QUEUE_NAME, processRenderJob, {
-    connection: redisConfig,
-    concurrency: 2,
-    limiter: { max: 5, duration: 60_000 },
-  });
+  if (redisOk) {
+    const cfg = getRedisConfig();
 
-  worker.on('ready', () => {
-    console.log(`[Worker] Worker ready — listening on "${QUEUE_NAME}"`);
-  });
+    const bullWorker = new Worker(RENDER_QUEUE,
+      async (job: Job<{ project_id: string; template_id: string; inputs_json: Record<string, string> }>) => {
+        await processRender(job.data.project_id, job.data.template_id, job.data.inputs_json, `queue:${job.id}`);
+      },
+      { connection: cfg, concurrency: 1, limiter: { max: 3, duration: 60_000 } }
+    );
+    bullWorker.on('ready', () => console.log(`[Worker] BullMQ listening: ${RENDER_QUEUE}`));
+    bullWorker.on('failed', (job, err) => console.error(`[Worker] Queue job ${job?.id} failed: ${err.message}`));
+    bullWorker.on('error', (err) => console.error(`[Worker] BullMQ error: ${err.message}`));
+    workers.push(bullWorker);
+  }
 
-  worker.on('completed', (job) => {
-    console.log(`[Worker] ✓ Job ${job.id} completed successfully`);
-  });
+  console.log(`[Worker] Running initial poll...`);
+  await poll();
 
-  worker.on('failed', (job, err) => {
-    console.error(`[Worker] ✗ Job ${job?.id} failed: ${err.message}`);
-  });
+  const pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+  console.log(`[Worker] Ready — DB poll every ${POLL_INTERVAL_MS / 1000}s\n`);
 
-  worker.on('error', (err) => {
-    console.error('[Worker] Worker error:', err.message);
-  });
-
-  worker.on('stalled', (jobId) => {
-    console.warn(`[Worker] Job ${jobId} stalled — will be retried`);
-  });
-
-  console.log(`[Worker] Worker initialized — waiting for jobs...`);
-
-  const shutdown = async (signal: string) => {
-    console.log(`\n[Worker] ${signal} received — shutting down gracefully...`);
-    await worker.close();
-    console.log(`[Worker] Worker closed.`);
+  const shutdown = async (sig: string) => {
+    console.log(`\n[Worker] ${sig} — shutting down...`);
+    clearInterval(pollTimer);
+    for (const w of workers) await w.close();
+    console.log(`[Worker] Done.`);
     process.exit(0);
   };
 
@@ -356,7 +490,4 @@ async function main() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-main().catch((err) => {
-  console.error('[Worker] Failed to start worker:', err);
-  process.exit(1);
-});
+main().catch((err) => { console.error('[Worker] Fatal:', err); process.exit(1); });

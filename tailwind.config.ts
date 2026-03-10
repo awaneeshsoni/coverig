@@ -12,6 +12,12 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
       },
+      borderRadius: {
+        'palantir': '2px',
+      },
+      fontFamily: {
+        mono: ['var(--font-geist-mono)', 'ui-monospace', 'monospace'],
+      },
     },
   },
   plugins: [],

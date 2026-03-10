@@ -9,8 +9,9 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   ArrowLeft, Plus, Trash2, Save, Rocket, GripVertical,
-  Film, Type, Upload, CheckCircle, X, Loader2, ImageIcon, Video, FolderOpen,
+  Type, Upload, CheckCircle, X, Loader2, ImageIcon, Video, FolderOpen,
 } from 'lucide-react';
+import { ErrorBanner } from '@/components/ui/error-banner';
 import Link from 'next/link';
 import { SceneCanvas } from './scene-canvas';
 import { MediaLibraryModal } from '@/components/media-library-modal';
@@ -23,17 +24,15 @@ interface Props {
 
 const ELEMENT_TYPES: { value: ElementType; label: string }[] = [
   { value: 'text', label: 'Text' },
-  { value: 'video_slot', label: 'Video Slot' },
   { value: 'video', label: 'Video' },
   { value: 'image', label: 'Image' },
 ];
 
 function emptyElement(type: ElementType = 'text'): SceneElement {
   const defaults: Record<ElementType, Partial<SceneElement>> = {
-    text:       { width: 80, height: 8, x: 10, y: 45 },
-    video_slot: { width: 60, height: 35, x: 20, y: 30 },
-    video:      { width: 40, height: 25, x: 30, y: 35 },
-    image:      { width: 25, height: 15, x: 37, y: 5 },
+    text:  { width: 80, height: 8, x: 10, y: 45 },
+    video: { width: 60, height: 35, x: 20, y: 30 },
+    image: { width: 25, height: 15, x: 37, y: 5 },
   };
   return { type, label: '', editable: true, ...defaults[type] };
 }
@@ -44,8 +43,7 @@ function emptyScene(): TemplateScene {
 
 function elTypeIcon(t: ElementType) {
   if (t === 'text') return <Type className="h-4 w-4 text-orange-500" />;
-  if (t === 'video_slot') return <Film className="h-4 w-4 text-blue-500" />;
-  if (t === 'video') return <Video className="h-4 w-4 text-purple-500" />;
+  if (t === 'video') return <Video className="h-4 w-4 text-blue-500" />;
   return <ImageIcon className="h-4 w-4 text-emerald-500" />;
 }
 
@@ -59,21 +57,19 @@ export function TemplateForm({ template }: Props) {
   const [sampleUploading, setSampleUploading] = useState(false);
   const [sampleFileName, setSampleFileName] = useState(template?.preview_video_url ? 'Uploaded video' : '');
   const [scenes, setScenes] = useState<TemplateScene[]>(
-    (template?.config_json.scenes || []).map((s) => ({ ...s, elements: (s.elements || []).map(el => ({ x: undefined, y: undefined, width: undefined, height: undefined, ...el })) }))
+    (template?.config_json.scenes || []).map((s) => ({
+      ...s,
+      elements: (s.elements || []).map((el) => {
+        const base = { x: undefined, y: undefined, width: undefined, height: undefined, ...el };
+        return base;
+      }),
+    }))
   );
   const [selectedScene, setSelectedScene] = useState(0);
   const [selectedElement, setSelectedElement] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState('');
-  const [bgUploading, setBgUploading] = useState<Record<number, boolean>>({});
-  const [bgFileNames, setBgFileNames] = useState<Record<number, string>>(() => {
-    const initial: Record<number, string> = {};
-    (template?.config_json.scenes || []).forEach((s, i) => {
-      if (s.background_video) initial[i] = 'Uploaded video';
-    });
-    return initial;
-  });
   const [elUploading, setElUploading] = useState<Record<string, boolean>>({});
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryAccept, setLibraryAccept] = useState<'video' | 'image' | 'all'>('all');
@@ -123,30 +119,12 @@ export function TemplateForm({ template }: Props) {
     setScenes(next);
     if (selectedScene >= next.length) setSelectedScene(Math.max(0, next.length - 1));
     setSelectedElement(null);
-    setBgFileNames((prev) => {
-      const n: Record<number, string> = {};
-      Object.entries(prev).forEach(([k, v]) => { const ki = parseInt(k); if (ki < idx) n[ki] = v; else if (ki > idx) n[ki - 1] = v; });
-      return n;
-    });
   }
 
-  async function uploadBgVideo(sceneIdx: number, file: File) {
-    setBgUploading((prev) => ({ ...prev, [sceneIdx]: true }));
-    setError('');
-    try {
-      const url = await uploadFile(file);
-      updateScene(sceneIdx, { background_video: url });
-      setBgFileNames((prev) => ({ ...prev, [sceneIdx]: file.name }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setBgUploading((prev) => ({ ...prev, [sceneIdx]: false }));
-    }
-  }
-
-  function removeBgVideo(sceneIdx: number) {
-    updateScene(sceneIdx, { background_video: undefined });
-    setBgFileNames((prev) => { const n = { ...prev }; delete n[sceneIdx]; return n; });
+  /** Background: first full-size non-editable video element with src (user adds Video, sets editable=false) */
+  function getBackgroundVideo(scene: TemplateScene): string | undefined {
+    const bg = scene.elements.find((el) => el.type === 'video' && !el.editable && el.src && (el.width ?? 50) >= 90 && (el.height ?? 30) >= 90);
+    return bg?.src;
   }
 
   function addElement(sceneIdx: number, type: ElementType = 'text') {
@@ -187,6 +165,7 @@ export function TemplateForm({ template }: Props) {
   async function handleSave(publish: boolean) {
     setError('');
     if (!name.trim()) { setError('Template name is required'); return; }
+    if (!sampleVideoUrl?.trim()) { setError('Sample video (preview) is required'); return; }
     if (scenes.length === 0) { setError('Add at least one scene'); return; }
     for (const s of scenes) {
       if (!s.scene_name.trim()) { setError('All scenes must have a name'); return; }
@@ -202,8 +181,7 @@ export function TemplateForm({ template }: Props) {
 
     try {
       const config_json = { scenes };
-      const body: Record<string, unknown> = { name, description, config_json };
-      if (sampleVideoUrl) body.preview_video_url = sampleVideoUrl;
+      const body: Record<string, unknown> = { name, description, config_json, preview_video_url: sampleVideoUrl };
 
       if (isEdit) {
         const res = await fetch(`/api/moderator/templates/${template.id}`, {
@@ -211,11 +189,13 @@ export function TemplateForm({ template }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error((await res.json()).error);
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.error || resData.message || 'Save failed');
 
         if (publish) {
           const pubRes = await fetch(`/api/moderator/templates/${template.id}/publish`, { method: 'POST' });
-          if (!pubRes.ok) throw new Error((await pubRes.json()).error);
+          const pubData = await pubRes.json();
+          if (!pubRes.ok) throw new Error(pubData.error || pubData.message || 'Publish failed');
         }
       } else {
         body.publish = publish;
@@ -224,14 +204,16 @@ export function TemplateForm({ template }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        if (!res.ok) throw new Error((await res.json()).error);
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.error || resData.message || 'Save failed');
       }
 
-      router.push('/moderator/templates');
+      setSaving(false);
+      setPublishing(false);
+      router.replace('/moderator/templates');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
-    } finally {
       setSaving(false);
       setPublishing(false);
     }
@@ -246,9 +228,15 @@ export function TemplateForm({ template }: Props) {
           <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         {isEdit && template.status && (
-          <Badge className="bg-zinc-100 text-zinc-600 capitalize">{template.status}</Badge>
+          <Badge className="bg-zinc-100 text-zinc-600 border border-zinc-300 capitalize">{template.status}</Badge>
         )}
       </div>
+
+      {error && (
+        <div className="shrink-0 mb-3">
+          <ErrorBanner message={error} onDismiss={() => setError('')} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 flex-1 min-h-0 items-start">
         {/* Left column: info + scene list */}
@@ -260,53 +248,53 @@ export function TemplateForm({ template }: Props) {
               <Textarea id="desc" label="Description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe what this template is for..." />
 
               <div>
-                <span className="text-xs font-medium text-zinc-500 mb-1.5 block">Sample Video (template preview for users)</span>
+                <span className="text-xs font-medium text-zinc-500 mb-1.5 block">Sample Video <span className="text-orange-500">(required)</span></span>
                 {sampleVideoUrl ? (
-                  <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                    <video src={sampleVideoUrl} className="h-12 w-8 rounded object-cover bg-zinc-900 shrink-0" controls playsInline />
+                  <div className="flex items-center gap-3 rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+                    <video src={sampleVideoUrl} className="h-12 w-8 rounded object-cover bg-zinc-50 shrink-0" controls playsInline />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                        <span className="text-xs text-emerald-800 truncate">{sampleFileName}</span>
+                        <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                        <span className="text-xs text-emerald-300 truncate">{sampleFileName}</span>
                       </div>
                     </div>
-                    <button onClick={() => { setSampleVideoUrl(''); setSampleFileName(''); }} className="text-zinc-400 hover:text-red-500 shrink-0">
+                    <button onClick={() => { setSampleVideoUrl(''); setSampleFileName(''); }} className="text-zinc-600 hover:text-red-500 shrink-0">
                       <X className="h-4 w-4" />
                     </button>
-                  </div>
+              </div>
                 ) : (
                   <div className="flex gap-2">
-                    <label className="flex-1 flex items-center gap-3 rounded-lg border-2 border-dashed border-zinc-300 hover:border-orange-400 bg-zinc-50 px-3 py-3 cursor-pointer transition-colors">
+                    <label className="flex-1 flex items-center gap-3 rounded border-2 border-dashed border-zinc-300 hover:border-orange-500 bg-zinc-50 px-3 py-3 cursor-pointer transition-colors">
                       {sampleUploading ? (
                         <><Loader2 className="h-5 w-5 text-orange-500 animate-spin shrink-0" /><span className="text-xs text-zinc-500">Uploading...</span></>
                       ) : (
-                        <><Upload className="h-5 w-5 text-zinc-400 shrink-0" /><span className="text-xs text-zinc-600">Upload</span></>
+                        <><Upload className="h-5 w-5 text-zinc-600 shrink-0" /><span className="text-xs text-zinc-600">Upload</span></>
                       )}
                       <input type="file" accept="video/*" className="hidden" disabled={sampleUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSampleVideo(f); }} />
                     </label>
                     <button type="button" onClick={() => openLibrary('video', (url) => { setSampleVideoUrl(url); setSampleFileName('From library'); })}
-                      className="flex items-center gap-1.5 rounded-lg border-2 border-dashed border-zinc-300 hover:border-orange-400 bg-zinc-50 px-3 py-3 transition-colors text-xs text-zinc-600 hover:text-orange-600">
+                      className="flex items-center gap-1.5 rounded border-2 border-dashed border-zinc-300 hover:border-orange-500 bg-zinc-50 px-3 py-3 transition-colors text-xs text-zinc-600 hover:text-orange-400">
                       <FolderOpen className="h-4 w-4" />Library
                     </button>
                   </div>
                 )}
-              </div>
+                </div>
             </CardContent>
           </Card>
 
-          <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-800">Scenes</h2>
-            <Button variant="ghost" size="sm" onClick={addScene}><Plus className="h-4 w-4 mr-1" />Add Scene</Button>
-          </div>
+                <Button variant="ghost" size="sm" onClick={addScene}><Plus className="h-4 w-4 mr-1" />Add Scene</Button>
+              </div>
 
           {scenes.length === 0 && (
-            <Card><CardContent className="py-6 text-center"><p className="text-sm text-zinc-400">No scenes yet.</p></CardContent></Card>
+            <Card><CardContent className="py-6 text-center"><p className="text-sm text-zinc-600">No scenes yet.</p></CardContent></Card>
           )}
 
           {scenes.map((scene, si) => (
             <Card
               key={si}
-              className={`cursor-pointer transition-colors ${selectedScene === si ? 'border-orange-400 border-l-4' : 'hover:border-zinc-300'}`}
+              className={`cursor-pointer transition-colors ${selectedScene === si ? 'border-orange-500 border-l-4' : 'hover:border-zinc-300'}`}
               onClick={() => { setSelectedScene(si); setSelectedElement(null); }}
             >
               <CardContent className="py-3">
@@ -318,19 +306,19 @@ export function TemplateForm({ template }: Props) {
                       onChange={(e) => { e.stopPropagation(); updateScene(si, { scene_name: e.target.value }); }}
                       onClick={(e) => e.stopPropagation()}
                       placeholder="Scene name"
-                      className="w-full rounded border border-zinc-200 bg-white px-2 py-1 text-sm font-medium text-zinc-900 focus:border-orange-500 focus:outline-none"
+                      className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-sm font-medium text-zinc-900 focus:border-orange-500 focus:outline-none"
                     />
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-zinc-400">{scene.elements.length} elements</span>
-                      {scene.background_video && <span className="text-xs text-emerald-600">BG video</span>}
+                      <span className="text-xs text-zinc-600">{scene.elements.length} elements</span>
+                      {getBackgroundVideo(scene) && <span className="text-xs text-emerald-600">BG video</span>}
                     </div>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); removeScene(si); }} className="text-zinc-400 hover:text-red-500">
+                  <button onClick={(e) => { e.stopPropagation(); removeScene(si); }} className="text-zinc-600 hover:text-red-500">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
-              </CardContent>
-            </Card>
+            </CardContent>
+          </Card>
           ))}
 
           <Card>
@@ -355,42 +343,17 @@ export function TemplateForm({ template }: Props) {
               <div style={{ maxWidth: 'calc((100vh - 14rem) * 9 / 16)' }} className="mx-auto">
               <SceneCanvas
                 elements={currentScene.elements}
-                backgroundVideo={currentScene.background_video}
+                backgroundVideo={getBackgroundVideo(currentScene)}
                 selectedIndex={selectedElement}
                 onSelect={setSelectedElement}
                 onUpdateElement={(elIdx, updates) => updateElement(selectedScene, elIdx, updates)}
               />
               </div>
-              <div>
-                <span className="text-xs font-medium text-zinc-500 mb-1.5 block">Background Video</span>
-                {currentScene.background_video ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
-                    <span className="text-xs font-medium text-emerald-800 truncate flex-1">{bgFileNames[selectedScene] || 'Video uploaded'}</span>
-                    <button onClick={() => removeBgVideo(selectedScene)} className="text-emerald-400 hover:text-red-500"><X className="h-4 w-4" /></button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <label className="flex-1 flex items-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 hover:border-orange-400 bg-zinc-50 px-3 py-2 cursor-pointer">
-                      {bgUploading[selectedScene] ? (
-                        <><Loader2 className="h-4 w-4 text-orange-500 animate-spin" /><span className="text-xs text-zinc-500">Uploading...</span></>
-                      ) : (
-                        <><Upload className="h-4 w-4 text-zinc-400" /><span className="text-xs text-zinc-600">Upload</span></>
-                      )}
-                      <input type="file" accept="video/*" className="hidden" disabled={bgUploading[selectedScene]}
-                        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadBgVideo(selectedScene, f); }} />
-                    </label>
-                    <button type="button" onClick={() => { const si = selectedScene; openLibrary('video', (url) => { updateScene(si, { background_video: url }); setBgFileNames((p) => ({ ...p, [si]: 'From library' })); }); }}
-                      className="flex items-center gap-1 rounded-lg border-2 border-dashed border-zinc-300 hover:border-orange-400 bg-zinc-50 px-2 py-2 transition-colors text-xs text-zinc-600 hover:text-orange-600">
-                      <FolderOpen className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
+              <p className="text-xs text-zinc-500">Add a Video element and set editable=false to use as background.</p>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 rounded-lg border-2 border-dashed border-zinc-200">
-              <p className="text-sm text-zinc-400">Add a scene to start</p>
+            <div className="flex items-center justify-center h-64 rounded border-2 border-dashed border-zinc-300">
+              <p className="text-sm text-zinc-500">Add a scene to start</p>
             </div>
           )}
         </div>
@@ -416,7 +379,7 @@ export function TemplateForm({ template }: Props) {
               </div>
 
               {currentScene.elements.length === 0 && (
-                <Card><CardContent className="py-4 text-center"><p className="text-xs text-zinc-400">No elements. Add one above.</p></CardContent></Card>
+                <Card><CardContent className="py-4 text-center"><p className="text-xs text-zinc-600">No elements. Add one above.</p></CardContent></Card>
               )}
 
               {currentScene.elements.map((el, ei) => {
@@ -425,7 +388,7 @@ export function TemplateForm({ template }: Props) {
                 return (
                   <Card
                     key={ei}
-                    className={`transition-colors cursor-pointer ${isSelected ? 'border-orange-400 ring-1 ring-orange-200' : 'hover:border-zinc-300'}`}
+                    className={`transition-colors cursor-pointer ${isSelected ? 'border-orange-500 ring-1 ring-orange-500/30' : 'hover:border-zinc-300'}`}
                     onClick={() => setSelectedElement(ei)}
                   >
                     <CardContent className="py-3 space-y-3">
@@ -434,7 +397,7 @@ export function TemplateForm({ template }: Props) {
                         <select
                           value={el.type}
                           onChange={(e) => updateElement(selectedScene, ei, { type: e.target.value as ElementType })}
-                          className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none"
+                          className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none"
                         >
                           {ELEMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
@@ -442,9 +405,9 @@ export function TemplateForm({ template }: Props) {
                           value={el.label}
                           onChange={(e) => updateElement(selectedScene, ei, { label: e.target.value })}
                           placeholder="Label"
-                          className="flex-1 rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none"
+                          className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none"
                         />
-                        <button onClick={(e) => { e.stopPropagation(); removeElement(selectedScene, ei); }} className="text-zinc-400 hover:text-red-500">
+                        <button onClick={(e) => { e.stopPropagation(); removeElement(selectedScene, ei); }} className="text-zinc-600 hover:text-red-500">
                           <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
@@ -468,28 +431,28 @@ export function TemplateForm({ template }: Props) {
                       {isSelected && (
                         <div className="grid grid-cols-4 gap-2">
                           <div>
-                            <label className="text-[10px] text-zinc-400 block">X %</label>
+                            <label className="text-[10px] text-zinc-600 block">X %</label>
                             <input type="number" min={0} max={100} step={0.5} value={el.x ?? 0}
                               onChange={(e) => updateElement(selectedScene, ei, { x: parseFloat(e.target.value) || 0 })}
-                              className="w-full rounded border border-zinc-200 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
+                              className="w-full rounded border border-zinc-300 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
                           </div>
                           <div>
-                            <label className="text-[10px] text-zinc-400 block">Y %</label>
+                            <label className="text-[10px] text-zinc-600 block">Y %</label>
                             <input type="number" min={0} max={100} step={0.5} value={el.y ?? 0}
                               onChange={(e) => updateElement(selectedScene, ei, { y: parseFloat(e.target.value) || 0 })}
-                              className="w-full rounded border border-zinc-200 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
+                              className="w-full rounded border border-zinc-300 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
                           </div>
                           <div>
-                            <label className="text-[10px] text-zinc-400 block">W %</label>
+                            <label className="text-[10px] text-zinc-600 block">W %</label>
                             <input type="number" min={5} max={100} step={0.5} value={el.width ?? 30}
                               onChange={(e) => updateElement(selectedScene, ei, { width: parseFloat(e.target.value) || 30 })}
-                              className="w-full rounded border border-zinc-200 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
+                              className="w-full rounded border border-zinc-300 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
                           </div>
                           <div>
-                            <label className="text-[10px] text-zinc-400 block">H %</label>
+                            <label className="text-[10px] text-zinc-600 block">H %</label>
                             <input type="number" min={3} max={100} step={0.5} value={el.height ?? 10}
                               onChange={(e) => updateElement(selectedScene, ei, { height: parseFloat(e.target.value) || 10 })}
-                              className="w-full rounded border border-zinc-200 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
+                              className="w-full rounded border border-zinc-300 px-1.5 py-1 text-xs text-zinc-900 focus:border-orange-500 focus:outline-none" />
                           </div>
                         </div>
                       )}
@@ -499,22 +462,22 @@ export function TemplateForm({ template }: Props) {
                         <div className="space-y-3">
                           <div className="flex items-center gap-2">
                             <select value={el.position || 'center'} onChange={(e) => updateElement(selectedScene, ei, { position: e.target.value as TextPosition })}
-                              className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none">
+                              className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none">
                               <option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option>
                             </select>
                             {!el.editable && (
                               <textarea value={el.default_value || ''} onChange={(e) => updateElement(selectedScene, ei, { default_value: e.target.value })}
                                 placeholder="Default text" rows={2}
-                                className="flex-1 rounded border border-zinc-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none resize-none"
+                                className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none resize-none"
                                 onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }} />
                             )}
                           </div>
                           {isSelected && (
-                            <div className="space-y-2 border-t border-zinc-100 pt-2">
-                              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Text Style</span>
+                            <div className="space-y-2 border-t border-zinc-800 pt-2">
+                              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Text Style</span>
                               <div>
-                                <label className="text-[10px] text-zinc-400 block mb-0.5">Font</label>
-                                <select className="w-full rounded border border-zinc-200 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none"
+                                <label className="text-[10px] text-zinc-600 block mb-0.5">Font</label>
+                                <select className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs focus:border-orange-500 focus:outline-none"
                                   value={el.fontFamily || 'Arial'}
                                   onChange={(e) => updateElement(selectedScene, ei, { fontFamily: e.target.value as FontFamily })}>
                                   {FONT_FAMILIES.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
@@ -522,24 +485,24 @@ export function TemplateForm({ template }: Props) {
                               </div>
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <label className="text-[10px] text-zinc-400 block mb-0.5">Size</label>
+                                  <label className="text-[10px] text-zinc-600 block mb-0.5">Size</label>
                                   <input type="number" min={12} max={120} value={el.fontSize || 48}
                                     onChange={(e) => updateElement(selectedScene, ei, { fontSize: +e.target.value })}
-                                    className="w-full rounded border border-zinc-200 px-1.5 py-1 text-xs focus:border-orange-500 focus:outline-none" />
+                                    className="w-full rounded border border-zinc-300 px-1.5 py-1 text-xs focus:border-orange-500 focus:outline-none" />
                                 </div>
                                 <div>
-                                  <label className="text-[10px] text-zinc-400 block mb-0.5">Weight</label>
+                                  <label className="text-[10px] text-zinc-600 block mb-0.5">Weight</label>
                                   <div className="flex gap-1">
                                     {(['normal', 'bold'] as const).map((w) => (
                                       <button key={w} type="button" onClick={() => updateElement(selectedScene, ei, { fontWeight: w })}
-                                        className={`flex-1 text-[10px] py-1 rounded border ${(el.fontWeight || 'bold') === w ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-zinc-200 text-zinc-500'}`}
+                                        className={`flex-1 text-[10px] py-1 rounded border ${(el.fontWeight || 'bold') === w ? 'bg-orange-500/20 border-orange-500/50 text-orange-400' : 'border-zinc-300 text-zinc-500'}`}
                                       >{w}</button>
                                     ))}
                                   </div>
                                 </div>
                               </div>
                               <div>
-                                <label className="text-[10px] text-zinc-400 block mb-0.5">Color</label>
+                                <label className="text-[10px] text-zinc-600 block mb-0.5">Color</label>
                                 <div className="flex gap-1 flex-wrap items-center">
                                   {COLOR_SWATCHES.map((c) => (
                                     <button key={c} type="button" onClick={() => updateElement(selectedScene, ei, { fontColor: c })}
@@ -551,28 +514,28 @@ export function TemplateForm({ template }: Props) {
                                 </div>
                               </div>
                               <div className="flex items-center justify-between">
-                                <label className="text-[10px] text-zinc-400">Drop Shadow</label>
+                                <label className="text-[10px] text-zinc-600">Drop Shadow</label>
                                 <button type="button" onClick={() => updateElement(selectedScene, ei, { dropShadow: !el.dropShadow })}
                                   className={`w-8 h-4 rounded-full transition-colors ${el.dropShadow ? 'bg-orange-500' : 'bg-zinc-200'}`}>
-                                  <div className={`w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${el.dropShadow ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                                  <div className={`w-3.5 h-3.5 rounded-full bg-zinc-50 shadow transition-transform ${el.dropShadow ? 'translate-x-4' : 'translate-x-0.5'}`} />
                                 </button>
                               </div>
                               {el.dropShadow && (
                                 <div className="grid grid-cols-3 gap-1">
                                   <div>
-                                    <label className="text-[10px] text-zinc-400 block">Shadow X</label>
+                                    <label className="text-[10px] text-zinc-600 block">Shadow X</label>
                                     <input type="number" min={-10} max={10} value={el.shadowX ?? 2}
                                       onChange={(e) => updateElement(selectedScene, ei, { shadowX: +e.target.value })}
-                                      className="w-full rounded border border-zinc-200 px-1 py-0.5 text-[10px] focus:border-orange-500 focus:outline-none" />
+                                      className="w-full rounded border border-zinc-300 px-1 py-0.5 text-[10px] focus:border-orange-500 focus:outline-none" />
                                   </div>
                                   <div>
-                                    <label className="text-[10px] text-zinc-400 block">Shadow Y</label>
+                                    <label className="text-[10px] text-zinc-600 block">Shadow Y</label>
                                     <input type="number" min={-10} max={10} value={el.shadowY ?? 2}
                                       onChange={(e) => updateElement(selectedScene, ei, { shadowY: +e.target.value })}
-                                      className="w-full rounded border border-zinc-200 px-1 py-0.5 text-[10px] focus:border-orange-500 focus:outline-none" />
+                                      className="w-full rounded border border-zinc-300 px-1 py-0.5 text-[10px] focus:border-orange-500 focus:outline-none" />
                                   </div>
                                   <div>
-                                    <label className="text-[10px] text-zinc-400 block">Color</label>
+                                    <label className="text-[10px] text-zinc-600 block">Color</label>
                                     <input type="color" value={el.shadowColor || '#000000'}
                                       onChange={(e) => updateElement(selectedScene, ei, { shadowColor: e.target.value })}
                                       className="w-full h-6 rounded border-0 cursor-pointer" />
@@ -588,47 +551,47 @@ export function TemplateForm({ template }: Props) {
                       {(el.type === 'video' || el.type === 'image') && (
                         <div className="space-y-2">
                           {el.src ? (
-                            <div className="flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
-                              <CheckCircle className="h-3 w-3 text-emerald-600 shrink-0" />
-                              <span className="text-xs text-emerald-800 truncate flex-1">Asset uploaded</span>
+                            <div className="flex items-center gap-2 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1.5">
+                              <CheckCircle className="h-3 w-3 text-emerald-400 shrink-0" />
+                              <span className="text-xs text-emerald-300 truncate flex-1">Asset uploaded</span>
                               <button onClick={() => updateElement(selectedScene, ei, { src: undefined })} className="text-emerald-400 hover:text-red-500">
                                 <X className="h-3 w-3" />
                               </button>
                             </div>
                           ) : (
                             <div className="flex gap-2">
-                              <label className="flex-1 flex items-center gap-2 rounded border-2 border-dashed border-zinc-300 hover:border-orange-400 bg-zinc-50 px-2 py-2 cursor-pointer">
+                              <label className="flex-1 flex items-center gap-2 rounded border-2 border-dashed border-zinc-300 hover:border-orange-500 bg-zinc-50 px-2 py-2 cursor-pointer">
                                 {elUploading[elUpKey] ? (
                                   <><Loader2 className="h-4 w-4 text-orange-500 animate-spin" /><span className="text-xs text-zinc-500">Uploading...</span></>
                                 ) : (
-                                  <><Upload className="h-4 w-4 text-zinc-400" /><span className="text-xs text-zinc-600">Upload</span></>
+                                  <><Upload className="h-4 w-4 text-zinc-600" /><span className="text-xs text-zinc-600">Upload</span></>
                                 )}
                                 <input type="file" accept={el.type === 'image' ? 'image/*' : 'video/*'} className="hidden" disabled={!!elUploading[elUpKey]}
                                   onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadElementAsset(selectedScene, ei, f); }} />
                               </label>
                               <button type="button" onClick={() => { const si = selectedScene; const idx = ei; openLibrary(el.type === 'image' ? 'image' : 'video', (url) => updateElement(si, idx, { src: url })); }}
-                                className="flex items-center gap-1 rounded border-2 border-dashed border-zinc-300 hover:border-orange-400 bg-zinc-50 px-2 py-2 transition-colors text-xs text-zinc-600 hover:text-orange-600">
+                                className="flex items-center gap-1 rounded border-2 border-dashed border-zinc-300 hover:border-orange-500 bg-zinc-50 px-2 py-2 transition-colors text-xs text-zinc-600 hover:text-orange-400">
                                 <FolderOpen className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           )}
                           {isSelected && (
-                            <div className="space-y-2 border-t border-zinc-100 pt-2">
-                              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Media Style</span>
+                            <div className="space-y-2 border-t border-zinc-800 pt-2">
+                              <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Media Style</span>
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <label className="text-[10px] text-zinc-400 block mb-0.5">Opacity</label>
+                                  <label className="text-[10px] text-zinc-600 block mb-0.5">Opacity</label>
                                   <input type="range" min={0} max={1} step={0.05} value={el.opacity ?? 1}
                                     className="w-full accent-orange-500"
                                     onChange={(e) => updateElement(selectedScene, ei, { opacity: +e.target.value })} />
-                                  <span className="text-[10px] text-zinc-400 block text-center">{Math.round((el.opacity ?? 1) * 100)}%</span>
+                                  <span className="text-[10px] text-zinc-600 block text-center">{Math.round((el.opacity ?? 1) * 100)}%</span>
                                 </div>
                                 <div>
-                                  <label className="text-[10px] text-zinc-400 block mb-0.5">Fit</label>
+                                  <label className="text-[10px] text-zinc-600 block mb-0.5">Fit</label>
                                   <div className="flex gap-1">
                                     {(['cover', 'contain'] as const).map((f) => (
                                       <button key={f} type="button" onClick={() => updateElement(selectedScene, ei, { objectFit: f })}
-                                        className={`flex-1 text-[10px] py-1 rounded border ${(el.objectFit || 'cover') === f ? 'bg-orange-50 border-orange-300 text-orange-700' : 'border-zinc-200 text-zinc-500'}`}
+                                        className={`flex-1 text-[10px] py-1 rounded border ${(el.objectFit || 'cover') === f ? 'bg-orange-500/20 border-orange-500/50 text-orange-400' : 'border-zinc-300 text-zinc-500'}`}
                                       >{f}</button>
                                     ))}
                                   </div>
@@ -636,26 +599,24 @@ export function TemplateForm({ template }: Props) {
                               </div>
                               {el.type === 'image' && (
                                 <div>
-                                  <label className="text-[10px] text-zinc-400 block mb-0.5">Border Radius (px)</label>
+                                  <label className="text-[10px] text-zinc-600 block mb-0.5">Border Radius (px)</label>
                                   <input type="number" min={0} max={50} value={el.borderRadius ?? 0}
                                     onChange={(e) => updateElement(selectedScene, ei, { borderRadius: +e.target.value })}
-                                    className="w-full rounded border border-zinc-200 px-1.5 py-1 text-xs focus:border-orange-500 focus:outline-none" />
+                                    className="w-full rounded border border-zinc-300 px-1.5 py-1 text-xs focus:border-orange-500 focus:outline-none" />
                                 </div>
                               )}
                             </div>
                           )}
                         </div>
                       )}
-                    </CardContent>
-                  </Card>
+            </CardContent>
+          </Card>
                 );
               })}
             </>
           )}
         </div>
       </div>
-
-      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3 shrink-0">{error}</p>}
 
       <MediaLibraryModal
         open={libraryOpen}

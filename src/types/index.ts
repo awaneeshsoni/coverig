@@ -1,11 +1,10 @@
-export type ProjectStatus = 'draft' | 'queued' | 'rendering' | 'completed' | 'failed';
 export type ScheduleStatus = 'pending' | 'posted' | 'failed';
 export type Platform = 'instagram' | 'tiktok';
 export type UserRole = 'user' | 'moderator' | 'admin';
 export type TemplateStatus = 'draft' | 'processing' | 'published' | 'rejected';
 
 export type TextPosition = 'top' | 'center' | 'bottom';
-export type ElementType = 'text' | 'video_slot' | 'video' | 'image';
+export type ElementType = 'text' | 'video' | 'image';
 
 export type FontFamily = 'Arial' | 'Impact' | 'Georgia' | 'Courier New' | 'Verdana' | 'Times New Roman' | 'Comic Sans MS';
 
@@ -81,23 +80,40 @@ export interface Project {
   id: string;
   user_id: string;
   template_id: string;
+  name: string | null;
   inputs_json: Record<string, string>;
-  status: ProjectStatus;
   output_video_url: string | null;
   created_at: string;
   updated_at: string;
   template?: Template;
 }
 
+export type ContentStatus = 'queued' | 'rendering' | 'completed' | 'failed';
+
+export interface Content {
+  id: string;
+  user_id: string;
+  project_id: string;
+  name: string | null;
+  output_video_url: string | null;
+  status: ContentStatus;
+  created_at: string;
+  updated_at: string;
+  project?: Project;
+}
+
 export interface ScheduledPost {
   id: string;
   user_id: string;
   project_id: string;
+  content_id?: string | null;
+  caption?: string | null;
   platform: Platform;
   scheduled_time: string;
   status: ScheduleStatus;
   created_at: string;
   project?: Project;
+  content?: { id: string; name: string | null; output_video_url: string | null; status: ContentStatus } | null;
 }
 
 export interface User {

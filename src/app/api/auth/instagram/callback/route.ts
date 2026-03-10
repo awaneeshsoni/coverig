@@ -3,8 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import {
   exchangeCodeForToken,
   exchangeForLongLivedToken,
-  getInstagramBusinessAccountId,
-  getInstagramUserInfo,
+  getInstagramAccountInfo,
 } from '@/lib/instagram';
 
 export async function GET(request: Request) {
@@ -25,15 +24,9 @@ export async function GET(request: Request) {
 
     const shortToken = await exchangeCodeForToken(code);
     const longToken = await exchangeForLongLivedToken(shortToken.access_token);
-    const igUserId = await getInstagramBusinessAccountId(longToken.access_token);
+    const { igUserId, username } = await getInstagramAccountInfo(longToken.access_token);
 
-    const tokenExpiry = new Date(Date.now() + longToken.expires_in * 1000).toISOString();
-
-    let username = 'unknown';
-    try {
-      const info = await getInstagramUserInfo(longToken.access_token);
-      username = info.username || 'unknown';
-    } catch {}
+    const tokenExpiry = new Date(Date.now() + (longToken.expires_in * 1000)).toISOString();
 
     const { error } = await supabase
       .from('instagram_accounts')

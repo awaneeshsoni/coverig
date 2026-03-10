@@ -32,20 +32,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { template_id, inputs_json } = await request.json();
+    const { template_id, inputs_json, name } = await request.json();
 
     if (!template_id) {
       return NextResponse.json({ error: 'template_id is required' }, { status: 400 });
     }
 
+    const insertData: Record<string, unknown> = {
+      user_id: user.id,
+      template_id,
+      inputs_json: inputs_json || {},
+      status: 'draft',
+    };
+    if (name != null && String(name).trim()) {
+      insertData.name = String(name).trim();
+    }
+
     const { data, error } = await supabase
       .from('projects')
-      .insert({
-        user_id: user.id,
-        template_id,
-        inputs_json: inputs_json || {},
-        status: 'draft',
-      })
+      .insert(insertData)
       .select()
       .single();
 

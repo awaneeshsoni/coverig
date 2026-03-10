@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { project_id, platform, scheduled_time } = await request.json();
+    const { project_id, content_id, platform, scheduled_time, caption } = await request.json();
 
     if (!project_id || !platform || !scheduled_time) {
       return NextResponse.json(
@@ -52,13 +52,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
+    if (content_id) {
+      const { data: content } = await supabase
+        .from('content')
+        .select('id')
+        .eq('id', content_id)
+        .eq('project_id', project_id)
+        .eq('user_id', user.id)
+        .single();
+      if (!content) {
+        return NextResponse.json({ error: 'Content not found or does not belong to project' }, { status: 404 });
+      }
+    }
+
     const { data, error } = await supabase
       .from('scheduled_posts')
       .insert({
         user_id: user.id,
         project_id,
+        content_id: content_id || null,
         platform,
         scheduled_time,
+        caption: caption || null,
         status: 'pending',
       })
       .select()

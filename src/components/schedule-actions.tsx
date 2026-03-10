@@ -24,7 +24,7 @@ export function ScheduleActions({ postId }: { postId: string }) {
 
   return (
     <Button variant="ghost" size="sm" onClick={handleDelete} loading={loading}>
-      <Trash2 className="h-4 w-4 text-zinc-400" />
+      <Trash2 className="h-4 w-4" />
     </Button>
   );
 }

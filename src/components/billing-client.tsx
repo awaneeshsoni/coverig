@@ -58,8 +58,8 @@ export function BillingClient({ subscription }: { subscription: Subscription }) 
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">Current Plan</h2>
-            <Badge className="bg-orange-100 text-orange-700 capitalize">{subscription.plan}</Badge>
+            <h2 className="text-sm font-semibold text-zinc-900">Current Plan</h2>
+            <Badge className="bg-orange-50 text-orange-700 border border-orange-200 capitalize">{subscription.plan}</Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -70,7 +70,7 @@ export function BillingClient({ subscription }: { subscription: Subscription }) 
                 {subscription.renders_used} / {subscription.renders_limit}
               </span>
             </div>
-            <div className="h-2.5 rounded-full bg-zinc-100 overflow-hidden">
+            <div className="h-2.5 rounded-full bg-zinc-200 overflow-hidden">
               <div
                 className="h-full rounded-full bg-orange-500 transition-all"
                 style={{ width: `${Math.min(usagePercent, 100)}%` }}
@@ -95,11 +95,11 @@ export function BillingClient({ subscription }: { subscription: Subscription }) 
             const isHigher = Object.keys(PLAN_LIMITS).indexOf(plan) > Object.keys(PLAN_LIMITS).indexOf(subscription.plan);
 
             return (
-              <Card key={plan} className={isCurrent ? 'border-orange-300 ring-1 ring-orange-300' : ''}>
+              <Card key={plan} className={isCurrent ? 'border-orange-500/70 ring-1 ring-orange-200' : ''}>
                 <CardContent className="py-6 space-y-4">
                   <div>
                     <h3 className="font-semibold text-zinc-900 capitalize">{info.label}</h3>
-                    <p className="text-2xl font-bold text-zinc-900 mt-1">{info.price}</p>
+                    <p className="text-2xl font-bold text-orange-500 mt-1">{info.price}</p>
                   </div>
                   <ul className="space-y-2">
                     {features.map((f) => (

@@ -1,10 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { getStatusColor, formatDate } from '@/lib/utils';
-import { FolderOpen, Film, Download, ExternalLink } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
+import { FolderOpen, Film, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import type { Project } from '@/types';
 
@@ -44,48 +43,31 @@ export default async function ProjectsPage() {
           }
         />
       ) : (
-        <div className="grid gap-4">
+          <div className="grid gap-4">
           {(projects as Project[]).map((project) => (
-            <Card key={project.id} className="hover:border-orange-300 transition-colors">
+            <Card key={project.id} className="hover:border-orange-500/50 transition-colors">
               <CardContent className="flex items-center gap-4 py-4">
-                <div className="h-12 w-12 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
-                  {project.output_video_url ? (
-                    <video
-                      src={project.output_video_url}
-                      className="h-full w-full rounded-lg object-cover"
-                      muted={false}
-                      playsInline
-                    />
-                  ) : (
-                    <Film className="h-5 w-5 text-zinc-500" />
-                  )}
+                <div className="h-12 w-12 rounded-sm border border-zinc-200 bg-zinc-100 flex items-center justify-center shrink-0">
+                  <Film className="h-5 w-5 text-orange-500" />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-zinc-800 truncate">
-                    {project.template?.name || 'Untitled Project'}
-                  </p>
+                  <Link
+                    href={`/dashboard/projects/${project.id}`}
+                    className="text-sm font-medium text-zinc-800 truncate block hover:text-orange-600 hover:underline"
+                  >
+                    {project.name || project.template?.name || 'Untitled Project'}
+                  </Link>
                   <p className="text-xs text-zinc-500">{formatDate(project.created_at)}</p>
                 </div>
 
-                <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
-
-                <div className="flex items-center gap-2">
-                  {project.output_video_url && (
-                    <a
-                      href={project.output_video_url}
-                      download
-                      className="text-zinc-500 hover:text-zinc-800 transition-colors"
-                    >
-                      <Download className="h-4 w-4" />
-                    </a>
-                  )}
-                  <Link href={`/dashboard/projects/${project.id}`}>
-                    <Button variant="ghost" size="sm">
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
+                <Link
+                  href={`/dashboard/projects/${project.id}`}
+                  className="p-2 text-zinc-500 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                  title="Edit"
+                >
+                  <Pencil className="h-4 w-4" />
+                </Link>
               </CardContent>
             </Card>
           ))}

@@ -39,19 +39,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-white bg-grid-subtle px-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold tracking-widest uppercase text-orange-500">
             Coverig
           </h1>
-          <p className="mt-2 text-sm text-zinc-500">Sign in to your account</p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-zinc-600">Sign in</p>
         </div>
 
         <button
           onClick={handleGoogleLogin}
           type="button"
-          className="flex w-full items-center justify-center gap-3 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50"
+          className="flex w-full items-center justify-center gap-3 rounded-sm border border-zinc-300 bg-white px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-700 transition-colors hover:border-orange-500/50 hover:bg-orange-50"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -66,8 +66,8 @@ export default function LoginPage() {
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-zinc-200" />
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-zinc-50 px-2 text-zinc-400">Or continue with email</span>
+          <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-semibold">
+            <span className="bg-white px-3 text-zinc-500">Or continue with email</span>
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export default function LoginPage() {
           />
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-xs font-mono text-red-600 bg-red-50 border border-red-200 rounded-sm px-3 py-2">{error}</p>
           )}
 
           <Button type="submit" className="w-full" loading={loading}>
@@ -100,9 +100,9 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-center text-sm text-zinc-500">
+        <p className="text-center text-xs font-semibold uppercase tracking-wider text-zinc-600">
           Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-orange-500 hover:text-orange-600 font-medium transition-colors">
+          <Link href="/signup" className="text-orange-500 hover:text-orange-400 transition-colors">
             Sign up
           </Link>
         </p>

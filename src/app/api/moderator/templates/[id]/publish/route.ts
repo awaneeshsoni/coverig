@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { getUserRole, canManageTemplates } from '@/lib/auth/roles';
-import { getPreviewQueue } from '@/lib/queue';
 
 export async function POST(
   request: Request,
@@ -25,31 +24,20 @@ export async function POST(
     if (!template) {
       return NextResponse.json({ error: 'Template not found' }, { status: 404 });
     }
-
-    await supabase
-      .from('templates')
-      .update({ status: 'processing' })
-      .eq('id', params.id);
-
-    const queue = getPreviewQueue();
-
-    try {
-      const existingJob = await queue.getJob(params.id);
-      if (existingJob) {
-        const state = await existingJob.getState();
-        if (state === 'active' || state === 'waiting' || state === 'delayed') {
-          return NextResponse.json({ data: { status: 'processing', message: 'Already queued' } });
-        }
-        await existingJob.remove();
-      }
-    } catch {
-      // Job doesn't exist or already removed
+    if (!template.preview_video_url?.trim()) {
+      return NextResponse.json({ error: 'Sample video (preview) is required before publishing' }, { status: 400 });
     }
 
-    await queue.add('preview', { template_id: params.id }, { jobId: `preview-${params.id}-${Date.now()}` });
-    console.log(`[API] Queued preview job for template ${params.id}`);
+    const { error: updateError } = await supabase
+      .from('templates')
+      .update({ status: 'published' })
+      .eq('id', params.id)
+      .eq('creator_id', userInfo.userId);
 
-    return NextResponse.json({ data: { status: 'processing' } });
+    if (updateError) throw updateError;
+
+    console.log(`[API] Template ${params.id} published`);
+    return NextResponse.json({ data: { status: 'published' } });
   } catch (error) {
     console.error('Publish template error:', error);
     return NextResponse.json({ error: 'Failed to publish template' }, { status: 500 });

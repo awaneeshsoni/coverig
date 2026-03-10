@@ -22,13 +22,13 @@ export function truncate(str: string, length: number) {
 
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
-    draft: 'bg-zinc-100 text-zinc-600',
-    queued: 'bg-yellow-100 text-yellow-700',
-    rendering: 'bg-blue-100 text-blue-700',
-    completed: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
-    pending: 'bg-yellow-100 text-yellow-700',
-    posted: 'bg-emerald-100 text-emerald-700',
+    draft: 'bg-zinc-100 text-zinc-600 border border-zinc-200',
+    queued: 'bg-amber-50 text-amber-700 border border-amber-200',
+    rendering: 'bg-orange-50 text-orange-700 border border-orange-200',
+    completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    failed: 'bg-red-50 text-red-700 border border-red-200',
+    pending: 'bg-amber-50 text-amber-700 border border-amber-200',
+    posted: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   };
-  return colors[status] || 'bg-zinc-100 text-zinc-600';
+  return colors[status] || 'bg-zinc-100 text-zinc-600 border border-zinc-200';
 }

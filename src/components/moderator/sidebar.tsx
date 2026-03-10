@@ -15,24 +15,26 @@ export function ModeratorSidebar({ role }: { role: UserRole }) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-64 flex-col border-r border-zinc-800 bg-zinc-950">
-      <div className="flex items-center gap-2 px-6 py-5 border-b border-zinc-800">
-        <Sparkles className="h-6 w-6 text-orange-500" />
-        <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
+    <aside className="flex w-64 flex-col border-r border-zinc-200 bg-white">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-zinc-200">
+        <div className="h-8 w-8 flex items-center justify-center border border-orange-500 bg-orange-50">
+          <Sparkles className="h-4 w-4 text-orange-500" />
+        </div>
+        <span className="text-sm font-bold tracking-widest uppercase text-orange-500">
           Coverig
         </span>
       </div>
 
-      <div className="px-3 pt-4 pb-2">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10">
-          <Shield className="h-4 w-4 text-orange-400" />
-          <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider">
+      <div className="px-2 pt-4 pb-2">
+        <div className="flex items-center gap-2 px-3 py-2 border border-orange-500/40 bg-orange-50">
+          <Shield className="h-3.5 w-3.5 text-orange-500" />
+          <span className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">
             {role === 'admin' ? 'Admin' : 'Moderator'}
           </span>
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-2 space-y-1">
+      <nav className="flex-1 px-2 py-2 space-y-0.5">
         {navItems.map((item) => {
           const isActive = item.href === '/moderator/templates'
             ? pathname === '/moderator/templates' || pathname === '/moderator'
@@ -43,13 +45,13 @@ export function ModeratorSidebar({ role }: { role: UserRole }) {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors border-l-2 -ml-px',
                 isActive
-                  ? 'bg-orange-500/10 text-orange-400'
-                  : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+                  ? 'border-l-orange-500 bg-orange-50 text-orange-600'
+                  : 'border-l-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 hover:border-l-zinc-300'
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="h-3.5 w-3.5 shrink-0" />
               {item.label}
             </Link>
           );
@@ -58,10 +60,10 @@ export function ModeratorSidebar({ role }: { role: UserRole }) {
         <div className="pt-4">
           <Link
             href="/dashboard"
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300 transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 text-xs font-semibold uppercase tracking-widest text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 transition-colors border-l-2 border-l-transparent -ml-px"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Dashboard
           </Link>
         </div>
       </nav>
